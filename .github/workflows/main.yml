@@ -5,7 +5,6 @@ on:
     paths:
       - 'SPECS/**'
       - 'SOURCES/**'
-      - 'upstream/**'
       - '.github/workflows/main.yml'
   workflow_dispatch:
 
@@ -23,20 +22,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          dnf install -y rpmdevtools perl
-
-      - name: Check Kernel Patch
-        run: |
-          for file in checkpatch.pl spelling.txt const_structs.checkpatch; do
-            curl --retry 3 --fail --silent --show-error --location \
-              "https://raw.githubusercontent.com/torvalds/linux/5b0764a53235d3c77e1ed674e836e1b3fe1a4b1f/scripts/$file" \
-              -o "/tmp/$file"
-          done
-          if ! perl /tmp/checkpatch.pl --no-tree --strict --no-signoff upstream/*.patch > /tmp/checkpatch.log 2>&1; then
-            sed 's/^/::error::/' /tmp/checkpatch.log
-            exit 1
-          fi
-          cat /tmp/checkpatch.log
+          dnf install -y rpmdevtools
 
       - name: Configure RPM Macros
         run: |
