@@ -1,0 +1,11 @@
+Fedora source baseline: kernel-7.2.11-200.fc44
+Source RPM: https://kojipkgs.fedoraproject.org/packages/kernel/7.2.11/200.fc44/src/kernel-7.2.11-200.fc44.src.rpm
+Source RPM SHA256: 5e7c2d81cd5fc54749e94917b6c2604c23c089dd0d277681e85e54d04bf6edc6
+Downstream patch: patch-7.2-redhat.patch
+Downstream patch SHA256: 85325cfb512e091397c045b228716f1a4b758b11badc2b1f00066539a675ac14
+
+Sources were extracted from the Fedora SRPM, not from a vanilla Linux checkout.
+The Fedora patch changes no imported sound/hda path; linux-kernel-test.patch is empty.
+Baseline file hashes are recorded in ../fedora-source.sha256.
+Local changes are documented by ../0001-asus-fx608lp-coldboot.patch.
+The patch is for review and maintenance only; RPM builds the maintained sources directly.

@@ -1,0 +1,253 @@
+diff --git a/sound/hda/codecs/realtek/alc269.c b/sound/hda/codecs/realtek/alc269.c
+index e98cc42..2141d87 100644
+--- a/sound/hda/codecs/realtek/alc269.c
++++ b/sound/hda/codecs/realtek/alc269.c
+@@ -2309,6 +2309,113 @@ static void alc_fixup_headset_mode_alc255_no_hp_mic(struct hda_codec *codec,
+ 	}
+ }
+ 
++/* Experimental snapshots for the FX608LP codec only. */
++static void alc256_fx608lp_log(struct hda_codec *codec, const char *stage)
++{
++	struct alc_spec *spec = codec->spec;
++
++	codec_info(codec, "FX608LP-v1 %s mode=%d type=%d mic=0x%x first_init_done=%d sense21=0x%x pin21=0x%x pin19=0x%x\n",
++		   stage, spec->current_headset_mode, spec->current_headset_type,
++		   spec->headset_mic_pin, spec->fx608lp_init_done,
++		   snd_hda_codec_read(codec, 0x21, 0, AC_VERB_GET_PIN_SENSE, 0),
++		   snd_hda_codec_read(codec, 0x21, 0, AC_VERB_GET_PIN_WIDGET_CONTROL, 0),
++		   snd_hda_codec_read(codec, 0x19, 0, AC_VERB_GET_PIN_WIDGET_CONTROL, 0));
++	codec_info(codec, "FX608LP-v1 %s coef1b=0x%x coef45=0x%x coef46=0x%x coef49=0x%x coef06=0x%x aux03=0x%x\n",
++		   stage, alc_read_coef_idx(codec, 0x1b),
++		   alc_read_coef_idx(codec, 0x45), alc_read_coef_idx(codec, 0x46),
++		   alc_read_coef_idx(codec, 0x49), alc_read_coef_idx(codec, 0x06),
++		   alc_read_coefex_idx(codec, 0x57, 0x03));
++}
++
++static void alc256_fx608lp_init(struct hda_codec *codec)
++{
++	struct alc_spec *spec = codec->spec;
++	static const struct coef_fw cold_init[] = {
++		WRITE_COEF(0x1b, 0x8a4b),
++		WRITE_COEF(0x45, 0xd089),
++		WRITE_COEF(0x1b, 0x0a4b),
++		WRITE_COEF(0x46, 0x0004),
++		WRITE_COEF(0x1b, 0x0e4b),
++		{}
++	};
++	unsigned int sense, pin_ctl, readback;
++	int coef5b, err;
++
++	alc256_fx608lp_log(codec, "init-enter");
++	alc256_init(codec);
++	if (spec->fx608lp_init_done)
++		goto out;
++
++	/* Test the OEM first-init segment before generic pin/capture setup. */
++	spec->fx608lp_init_done = true;
++	sense = snd_hda_codec_read(codec, 0x21, 0, AC_VERB_GET_PIN_SENSE, 0);
++	pin_ctl = snd_hda_codec_read(codec, 0x21, 0,
++				     AC_VERB_GET_PIN_WIDGET_CONTROL, 0);
++	coef5b = alc_read_coef_idx(codec, 0x5b);
++	codec_info(codec, "FX608LP-v1 cold-candidate sense=0x%x pinctl=0x%x coef5b=0x%x\n",
++		   sense, pin_ctl, coef5b);
++	/* The measured 0x4904 selects the OEM's older-variant setup. */
++	if (sense == ~0U || !(sense & AC_PINSENSE_PRESENCE) ||
++	    pin_ctl > 0xff || coef5b < 0 || (coef5b & 0x30)) {
++		codec_info(codec, "FX608LP-v1 cold-skip: jack absent or unsupported state/variant\n");
++		goto out;
++	}
++
++	alc256_fx608lp_log(codec, "cold-before");
++	alc_write_coefex_idx(codec, 0x57, 0x03, 0x09a3);
++	err = snd_hda_codec_write(codec, 0x21, 0,
++				 AC_VERB_SET_PIN_WIDGET_CONTROL, 0);
++	readback = snd_hda_codec_read(codec, 0x21, 0,
++				      AC_VERB_GET_PIN_WIDGET_CONTROL, 0);
++	codec_info(codec, "FX608LP-v1 cold-pin-disable ret=%d readback=0x%x\n",
++		   err, readback);
++	if (err < 0 || readback) {
++		codec_info(codec, "FX608LP-v1 cold-abort: pin-disable not confirmed\n");
++		goto restore;
++	}
++
++	alc_process_coef_fw(codec, cold_init);
++	msleep(30);
++	alc256_fx608lp_log(codec, "cold-after-30ms");
++restore:
++	/* Keep the output state chosen by alc256_init until generic init. */
++	err = snd_hda_codec_write(codec, 0x21, 0,
++				 AC_VERB_SET_PIN_WIDGET_CONTROL, pin_ctl);
++	readback = snd_hda_codec_read(codec, 0x21, 0,
++				      AC_VERB_GET_PIN_WIDGET_CONTROL, 0);
++	codec_info(codec, "FX608LP-v1 cold-pin-restore ret=%d target=0x%x readback=0x%x\n",
++		   err, pin_ctl, readback);
++out:
++	alc256_fx608lp_log(codec, "init-exit");
++}
++
++static void alc256_fx608lp_shutup(struct hda_codec *codec)
++{
++	alc256_fx608lp_log(codec, "shutup-enter");
++	alc256_shutup(codec);
++	alc256_fx608lp_log(codec, "shutup-exit");
++}
++
++static void alc256_fixup_asus_fx608lp(struct hda_codec *codec,
++				    const struct hda_fixup *fix, int action)
++{
++	struct alc_spec *spec = codec->spec;
++
++	if (codec->core.vendor_id != 0x10ec0256 ||
++	    codec->core.subsystem_id != 0x10431064)
++		return;
++
++	if (action == HDA_FIXUP_ACT_PRE_PROBE) {
++		spec->init_hook = alc256_fx608lp_init;
++		spec->shutup = alc256_fx608lp_shutup;
++	}
++	codec_info(codec, "FX608LP-v1 fixup action=%d cfg19=0x%08x headset=0x%x inputs=%d\n",
++		   action, snd_hda_codec_get_pincfg(codec, 0x19),
++		   spec->headset_mic_pin, spec->gen.autocfg.num_inputs);
++	if (action == HDA_FIXUP_ACT_INIT)
++		alc256_fx608lp_log(codec, "generic-init-complete");
++}
++
+ static void alc288_update_headset_jack_cb(struct hda_codec *codec,
+ 				       struct hda_jack_callback *jack)
+ {
+@@ -4134,6 +4241,7 @@ enum {
+ 	ALC282_FIXUP_ACER_DISABLE_LINEOUT,
+ 	ALC255_FIXUP_ACER_LIMIT_INT_MIC_BOOST,
+ 	ALC256_FIXUP_ACER_HEADSET_MIC,
++	ALC256_FIXUP_ASUS_FX608LP,
+ 	ALC285_FIXUP_IDEAPAD_S740_COEF,
+ 	ALC285_FIXUP_HP_LIMIT_INT_MIC_BOOST,
+ 	ALC295_FIXUP_ASUS_DACS,
+@@ -6158,6 +6266,13 @@ static const struct hda_fixup alc269_fixups[] = {
+ 		.chained = true,
+ 		.chain_id = ALC269_FIXUP_HEADSET_MODE_NO_HP_MIC
+ 	},
++	[ALC256_FIXUP_ASUS_FX608LP] = {
++		.type = HDA_FIXUP_FUNC,
++		.v.func = alc256_fixup_asus_fx608lp,
++		.chained_before = true,
++		.chain_id = ALC256_FIXUP_ASUS_MIC_NO_PRESENCE,
++	},
++
+ 	[ALC285_FIXUP_IDEAPAD_S740_COEF] = {
+ 		.type = HDA_FIXUP_FUNC,
+ 		.v.func = alc285_fixup_ideapad_s740_coef,
+@@ -7530,6 +7645,7 @@ static const struct hda_quirk alc269_fixup_tbl[] = {
+ 	SND_PCI_QUIRK(0x1043, 0x103f, "ASUS TX300", ALC282_FIXUP_ASUS_TX300),
+ 	SND_PCI_QUIRK(0x1043, 0x1054, "ASUS G614FH/FM/FP", ALC287_FIXUP_CS35L41_I2C_2),
+ 	SND_PCI_QUIRK(0x1043, 0x106d, "Asus K53BE", ALC269_FIXUP_LIMIT_INT_MIC_BOOST),
++	SND_PCI_QUIRK(0x1043, 0x1064, "ASUS FX608LP", ALC256_FIXUP_ASUS_FX608LP),
+ 	SND_PCI_QUIRK(0x1043, 0x106f, "ASUS VivoBook X515UA", ALC256_FIXUP_ASUS_MIC_NO_PRESENCE),
+ 	SND_PCI_QUIRK(0x1043, 0x1074, "ASUS G614PH/PM/PP", ALC287_FIXUP_CS35L41_I2C_2),
+ 	SND_PCI_QUIRK(0x1043, 0x10a1, "ASUS UX391UA", ALC294_FIXUP_ASUS_SPK),
+@@ -9122,3 +9238,5 @@ static struct hda_codec_driver alc269_driver = {
+ };
+ 
+ module_hda_codec_driver(alc269_driver);
++
++MODULE_INFO(fx608lp_experiment, "v1");
+diff --git a/sound/hda/codecs/realtek/realtek.c b/sound/hda/codecs/realtek/realtek.c
+index db365a7..3d521fa 100644
+--- a/sound/hda/codecs/realtek/realtek.c
++++ b/sound/hda/codecs/realtek/realtek.c
+@@ -1832,10 +1832,17 @@ static void alc_headset_mode_omtp(struct hda_codec *codec)
+ 	codec_dbg(codec, "Headset jack set to Nokia-style headset mode.\n");
+ }
+ 
++static bool alc_is_fx608lp(struct hda_codec *codec)
++{
++	return codec->core.vendor_id == 0x10ec0256 &&
++	       codec->core.subsystem_id == 0x10431064;
++}
++
+ static void alc_determine_headset_type(struct hda_codec *codec)
+ {
+ 	int val;
+ 	bool is_ctia = false;
++	const char *basis = "not-classified";
+ 	struct alc_spec *spec = codec->spec;
+ 	static const struct coef_fw coef0255[] = {
+ 		WRITE_COEF(0x45, 0xd089), /* combo jack auto switch control(Check type)*/
+@@ -1898,15 +1905,22 @@ static void alc_determine_headset_type(struct hda_codec *codec)
+ 		alc_process_coef_fw(codec, coef0255);
+ 		msleep(300);
+ 		val = alc_read_coef_idx(codec, 0x46);
++		if (alc_is_fx608lp(codec))
++			codec_info(codec, "FX608LP-v1 detect-primary coef46=0x%x\n", val);
+ 		is_ctia = (val & 0x0070) == 0x0070;
++		basis = val < 0 ? "read-error" : "ctia-signature";
+ 		if (!is_ctia) {
+ 			alc_write_coef_idx(codec, 0x45, 0xe089);
+ 			msleep(100);
+ 			val = alc_read_coef_idx(codec, 0x46);
++			if (alc_is_fx608lp(codec))
++				codec_info(codec, "FX608LP-v1 detect-secondary coef46=0x%x\n", val);
+ 			if ((val & 0x0070) == 0x0070)
+ 				is_ctia = false;
+ 			else
+ 				is_ctia = true;
++			basis = val < 0 ? "read-error" :
++				is_ctia ? "fallback-ctia" : "omtp-signature";
+ 		}
+ 		alc_write_coefex_idx(codec, 0x57, 0x3, 0x0da3);
+ 		alc_update_coefex_idx(codec, 0x57, 0x5, 1<<14, 0);
+@@ -2021,6 +2035,9 @@ static void alc_determine_headset_type(struct hda_codec *codec)
+ 		break;
+ 	}
+ 
++	if (alc_is_fx608lp(codec))
++		codec_info(codec, "FX608LP-v1 detect-complete selected=%s basis=%s (void return)\n",
++			   is_ctia ? "CTIA" : "OMTP", basis);
+ 	codec_dbg(codec, "Headset jack detected iPhone-style headset: %s\n",
+ 		  str_yes_no(is_ctia));
+ 	spec->current_headset_type = is_ctia ? ALC_HEADSET_TYPE_CTIA : ALC_HEADSET_TYPE_OMTP;
+@@ -2044,6 +2061,14 @@ static void alc_update_headset_mode(struct hda_codec *codec)
+ 	else
+ 		new_headset_mode = ALC_HEADSET_MODE_HEADPHONE;
+ 
++	if (alc_is_fx608lp(codec))
++		codec_info(codec, "FX608LP-v1 route old=%d new=%d type=%d mux=0x%x headset=0x%x classify=%d\n",
++			   spec->current_headset_mode, new_headset_mode,
++			   spec->current_headset_type, mux_pin, spec->headset_mic_pin,
++			   new_headset_mode != spec->current_headset_mode &&
++			   new_headset_mode == ALC_HEADSET_MODE_HEADSET &&
++			   spec->current_headset_type == ALC_HEADSET_TYPE_UNKNOWN);
++
+ 	if (new_headset_mode == spec->current_headset_mode) {
+ 		snd_hda_gen_update_outputs(codec);
+ 		return;
+@@ -2082,6 +2107,10 @@ static void alc_update_headset_mode(struct hda_codec *codec)
+ 						  PIN_VREFHIZ);
+ 	}
+ 	spec->current_headset_mode = new_headset_mode;
++	if (alc_is_fx608lp(codec))
++		codec_info(codec, "FX608LP-v1 route-applied mode=%d type=%d coef46=0x%x\n",
++			   new_headset_mode, spec->current_headset_type,
++			   alc_read_coef_idx(codec, 0x46));
+ 
+ 	snd_hda_gen_update_outputs(codec);
+ }
+@@ -2255,3 +2284,5 @@ EXPORT_SYMBOL_NS_GPL(alc_fixup_auto_mute_via_amp, "SND_HDA_CODEC_REALTEK");
+ MODULE_IMPORT_NS("SND_HDA_SCODEC_COMPONENT");
+ MODULE_LICENSE("GPL");
+ MODULE_DESCRIPTION("Realtek HD-audio codec helper");
++
++MODULE_INFO(fx608lp_experiment, "v1");
+diff --git a/sound/hda/codecs/realtek/realtek.h b/sound/hda/codecs/realtek/realtek.h
+index de95642..3234fbe 100644
+--- a/sound/hda/codecs/realtek/realtek.h
++++ b/sound/hda/codecs/realtek/realtek.h
+@@ -103,6 +103,7 @@ struct alc_spec {
+ 	hda_nid_t headphone_mic_pin;
+ 	int current_headset_mode;
+ 	int current_headset_type;
++	bool fx608lp_init_done; /* first-init experiment for SSID 1043:1064 */
+ 
+ 	/* hooks */
+ 	void (*init_hook)(struct hda_codec *codec);
