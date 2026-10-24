@@ -1832,17 +1832,10 @@ static void alc_headset_mode_omtp(struct hda_codec *codec)
 	codec_dbg(codec, "Headset jack set to Nokia-style headset mode.\n");
 }
 
-static bool alc_is_fx608lp(struct hda_codec *codec)
-{
-	return codec->core.vendor_id == 0x10ec0256 &&
-	       codec->core.subsystem_id == 0x10431064;
-}
-
 static void alc_determine_headset_type(struct hda_codec *codec)
 {
 	int val;
 	bool is_ctia = false;
-	const char *basis = "not-classified";
 	struct alc_spec *spec = codec->spec;
 	static const struct coef_fw coef0255[] = {
 		WRITE_COEF(0x45, 0xd089), /* combo jack auto switch control(Check type)*/
@@ -1905,22 +1898,15 @@ static void alc_determine_headset_type(struct hda_codec *codec)
 		alc_process_coef_fw(codec, coef0255);
 		msleep(300);
 		val = alc_read_coef_idx(codec, 0x46);
-		if (alc_is_fx608lp(codec))
-			codec_info(codec, "FX608LP-v1 detect-primary coef46=0x%x\n", val);
 		is_ctia = (val & 0x0070) == 0x0070;
-		basis = val < 0 ? "read-error" : "ctia-signature";
 		if (!is_ctia) {
 			alc_write_coef_idx(codec, 0x45, 0xe089);
 			msleep(100);
 			val = alc_read_coef_idx(codec, 0x46);
-			if (alc_is_fx608lp(codec))
-				codec_info(codec, "FX608LP-v1 detect-secondary coef46=0x%x\n", val);
 			if ((val & 0x0070) == 0x0070)
 				is_ctia = false;
 			else
 				is_ctia = true;
-			basis = val < 0 ? "read-error" :
-				is_ctia ? "fallback-ctia" : "omtp-signature";
 		}
 		alc_write_coefex_idx(codec, 0x57, 0x3, 0x0da3);
 		alc_update_coefex_idx(codec, 0x57, 0x5, 1<<14, 0);
@@ -2035,9 +2021,6 @@ static void alc_determine_headset_type(struct hda_codec *codec)
 		break;
 	}
 
-	if (alc_is_fx608lp(codec))
-		codec_info(codec, "FX608LP-v1 detect-complete selected=%s basis=%s (void return)\n",
-			   is_ctia ? "CTIA" : "OMTP", basis);
 	codec_dbg(codec, "Headset jack detected iPhone-style headset: %s\n",
 		  str_yes_no(is_ctia));
 	spec->current_headset_type = is_ctia ? ALC_HEADSET_TYPE_CTIA : ALC_HEADSET_TYPE_OMTP;
@@ -2060,14 +2043,6 @@ static void alc_update_headset_mode(struct hda_codec *codec)
 		new_headset_mode = ALC_HEADSET_MODE_MIC;
 	else
 		new_headset_mode = ALC_HEADSET_MODE_HEADPHONE;
-
-	if (alc_is_fx608lp(codec))
-		codec_info(codec, "FX608LP-v1 route old=%d new=%d type=%d mux=0x%x headset=0x%x classify=%d\n",
-			   spec->current_headset_mode, new_headset_mode,
-			   spec->current_headset_type, mux_pin, spec->headset_mic_pin,
-			   new_headset_mode != spec->current_headset_mode &&
-			   new_headset_mode == ALC_HEADSET_MODE_HEADSET &&
-			   spec->current_headset_type == ALC_HEADSET_TYPE_UNKNOWN);
 
 	if (new_headset_mode == spec->current_headset_mode) {
 		snd_hda_gen_update_outputs(codec);
@@ -2107,10 +2082,6 @@ static void alc_update_headset_mode(struct hda_codec *codec)
 						  PIN_VREFHIZ);
 	}
 	spec->current_headset_mode = new_headset_mode;
-	if (alc_is_fx608lp(codec))
-		codec_info(codec, "FX608LP-v1 route-applied mode=%d type=%d coef46=0x%x\n",
-			   new_headset_mode, spec->current_headset_type,
-			   alc_read_coef_idx(codec, 0x46));
 
 	snd_hda_gen_update_outputs(codec);
 }
@@ -2284,5 +2255,3 @@ EXPORT_SYMBOL_NS_GPL(alc_fixup_auto_mute_via_amp, "SND_HDA_CODEC_REALTEK");
 MODULE_IMPORT_NS("SND_HDA_SCODEC_COMPONENT");
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Realtek HD-audio codec helper");
-
-MODULE_INFO(fx608lp_experiment, "v1");

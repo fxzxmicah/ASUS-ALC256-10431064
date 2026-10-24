@@ -7,20 +7,21 @@
 %global debug_package %{nil}
 
 %if %{sign_module}
-%define sign_tool %(gzip -c %{SOURCE2} | base64)
+%define sign_tool %(gzip -c %{SOURCE3} | base64)
 %endif
 
 Name:           asus-alc256-modules
 Version:        %{kernel_ver}
 Release:        %{kernel_rel}
-Summary:        ASUS FX608LP ALC256 cold-boot headset experiment
+Summary:        ASUS FX608LP ALC256 headset microphone fix
 License:        GPL-2.0-or-later
 ExclusiveArch:  x86_64
 
 Source0:        realtek.tar.xz
 Source1:        LICENSE
+Source2:        README
 %if %{sign_module}
-Source2:        https://github.com/fxzxmic/sign-module/releases/download/v1.0.2/sign-module
+Source3:        https://github.com/fxzxmic/sign-module/releases/download/v1.0.2/sign-module
 %endif
 
 BuildRequires:  gcc make kernel-devel = %{kernel_ver}-%{kernel_rel}
@@ -45,10 +46,13 @@ Requires(post): libz.so.1()(64bit)
 %endif
 
 %description
-Experimental headset cold-boot fix for codec 10ec:0256, subsystem 1043:1064.
-The downstream sources are built against the matching Fedora kernel-devel.
-Modules are unsigned in CI and can be signed with an existing local MOK during
-installation. Hardware effectiveness has not been verified.
+Realtek ALC256 headset microphone cold-boot fix for ASUS FX608LP systems
+with subsystem ID 1043:1064. Built from maintained Fedora kernel sources
+against the matching kernel-devel package. The original Fedora modules
+are preserved, and packages for different kernels can coexist.
+
+Modules are unsigned in CI. Installation signs them when a local MOK key
+and certificate are available at /etc/keys/modsign.key and modsign.der.
 
 %prep
 %setup -q -n realtek
@@ -70,12 +74,12 @@ override snd-hda-codec-alc269 %{kernel_ver}-%{kernel_rel}.%{_arch} updates/asus-
 override snd-hda-codec-realtek-lib %{kernel_ver}-%{kernel_rel}.%{_arch} updates/asus-alc256
 EOF
 install -Dm0644 %{SOURCE1} %{buildroot}%{_licensedir}/%{name}-%{version}-%{release}/LICENSE
+install -Dm0644 %{SOURCE2} %{buildroot}%{_docdir}/%{name}-%{version}-%{release}/README
 
 %check
 for module in snd-hda-codec-alc269 snd-hda-codec-realtek-lib; do
     test "$(modinfo -F vermagic "$module.ko.xz" | cut -d ' ' -f1)" = "%{kernel_ver}-%{kernel_rel}.%{_arch}"
     test -z "$(modinfo -F signer "$module.ko.xz")"
-    test "$(modinfo -F fx608lp_experiment "$module.ko.xz")" = v1
     modinfo "$module.ko.xz"
 done
 
@@ -103,6 +107,7 @@ fi
 %files
 %defattr(-,root,root,-)
 %license %{_licensedir}/%{name}-%{version}-%{release}/
+%doc %{_docdir}/%{name}-%{version}-%{release}/
 %{module_dir}/
 %{_prefix}/lib/depmod.d/asus-alc256-%{kernel_ver}-%{kernel_rel}.conf
 

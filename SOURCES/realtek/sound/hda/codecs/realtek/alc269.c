@@ -2309,25 +2309,12 @@ static void alc_fixup_headset_mode_alc255_no_hp_mic(struct hda_codec *codec,
 	}
 }
 
-/* Experimental snapshots for the FX608LP codec only. */
-static void alc256_fx608lp_log(struct hda_codec *codec, const char *stage)
-{
-	struct alc_spec *spec = codec->spec;
-
-	codec_info(codec, "FX608LP-v1 %s mode=%d type=%d mic=0x%x first_init_done=%d sense21=0x%x pin21=0x%x pin19=0x%x\n",
-		   stage, spec->current_headset_mode, spec->current_headset_type,
-		   spec->headset_mic_pin, spec->fx608lp_init_done,
-		   snd_hda_codec_read(codec, 0x21, 0, AC_VERB_GET_PIN_SENSE, 0),
-		   snd_hda_codec_read(codec, 0x21, 0, AC_VERB_GET_PIN_WIDGET_CONTROL, 0),
-		   snd_hda_codec_read(codec, 0x19, 0, AC_VERB_GET_PIN_WIDGET_CONTROL, 0));
-	codec_info(codec, "FX608LP-v1 %s coef1b=0x%x coef45=0x%x coef46=0x%x coef49=0x%x coef06=0x%x aux03=0x%x\n",
-		   stage, alc_read_coef_idx(codec, 0x1b),
-		   alc_read_coef_idx(codec, 0x45), alc_read_coef_idx(codec, 0x46),
-		   alc_read_coef_idx(codec, 0x49), alc_read_coef_idx(codec, 0x06),
-		   alc_read_coefex_idx(codec, 0x57, 0x03));
-}
-
-static void alc256_fx608lp_init(struct hda_codec *codec)
+/*
+ * With a headset connected at boot, the FX608LP needs the OEM initialization
+ * sequence before generic pin setup for headset detection to work. Run it only
+ * on the first initialization; runtime resume uses the normal ALC256 setup.
+ */
+static void alc256_init_asus_fx608lp(struct hda_codec *codec)
 {
 	struct alc_spec *spec = codec->spec;
 	static const struct coef_fw cold_init[] = {
@@ -2338,62 +2325,41 @@ static void alc256_fx608lp_init(struct hda_codec *codec)
 		WRITE_COEF(0x1b, 0x0e4b),
 		{}
 	};
-	unsigned int sense, pin_ctl, readback;
-	int coef5b, err;
+	unsigned int sense, pin_ctl;
+	int coef, err;
 
-	alc256_fx608lp_log(codec, "init-enter");
 	alc256_init(codec);
 	if (spec->fx608lp_init_done)
-		goto out;
+		return;
 
-	/* Test the OEM first-init segment before generic pin/capture setup. */
 	spec->fx608lp_init_done = true;
 	sense = snd_hda_codec_read(codec, 0x21, 0, AC_VERB_GET_PIN_SENSE, 0);
+	if (sense == ~0U || !(sense & AC_PINSENSE_PRESENCE))
+		return;
+
+	/* This sequence is for the ALC256 variant with bits 5:4 clear. */
+	coef = alc_read_coef_idx(codec, 0x5b);
+	if (coef < 0 || (coef & 0x30))
+		return;
+
 	pin_ctl = snd_hda_codec_read(codec, 0x21, 0,
 				     AC_VERB_GET_PIN_WIDGET_CONTROL, 0);
-	coef5b = alc_read_coef_idx(codec, 0x5b);
-	codec_info(codec, "FX608LP-v1 cold-candidate sense=0x%x pinctl=0x%x coef5b=0x%x\n",
-		   sense, pin_ctl, coef5b);
-	/* The measured 0x4904 selects the OEM's older-variant setup. */
-	if (sense == ~0U || !(sense & AC_PINSENSE_PRESENCE) ||
-	    pin_ctl > 0xff || coef5b < 0 || (coef5b & 0x30)) {
-		codec_info(codec, "FX608LP-v1 cold-skip: jack absent or unsupported state/variant\n");
-		goto out;
-	}
+	if (pin_ctl > 0xff)
+		return;
 
-	alc256_fx608lp_log(codec, "cold-before");
 	alc_write_coefex_idx(codec, 0x57, 0x03, 0x09a3);
 	err = snd_hda_codec_write(codec, 0x21, 0,
 				 AC_VERB_SET_PIN_WIDGET_CONTROL, 0);
-	readback = snd_hda_codec_read(codec, 0x21, 0,
-				      AC_VERB_GET_PIN_WIDGET_CONTROL, 0);
-	codec_info(codec, "FX608LP-v1 cold-pin-disable ret=%d readback=0x%x\n",
-		   err, readback);
-	if (err < 0 || readback) {
-		codec_info(codec, "FX608LP-v1 cold-abort: pin-disable not confirmed\n");
+	if (err < 0 || snd_hda_codec_read(codec, 0x21, 0,
+					AC_VERB_GET_PIN_WIDGET_CONTROL, 0))
 		goto restore;
-	}
 
 	alc_process_coef_fw(codec, cold_init);
 	msleep(30);
-	alc256_fx608lp_log(codec, "cold-after-30ms");
 restore:
-	/* Keep the output state chosen by alc256_init until generic init. */
-	err = snd_hda_codec_write(codec, 0x21, 0,
-				 AC_VERB_SET_PIN_WIDGET_CONTROL, pin_ctl);
-	readback = snd_hda_codec_read(codec, 0x21, 0,
-				      AC_VERB_GET_PIN_WIDGET_CONTROL, 0);
-	codec_info(codec, "FX608LP-v1 cold-pin-restore ret=%d target=0x%x readback=0x%x\n",
-		   err, pin_ctl, readback);
-out:
-	alc256_fx608lp_log(codec, "init-exit");
-}
-
-static void alc256_fx608lp_shutup(struct hda_codec *codec)
-{
-	alc256_fx608lp_log(codec, "shutup-enter");
-	alc256_shutup(codec);
-	alc256_fx608lp_log(codec, "shutup-exit");
+	/* Preserve the output state until generic pin setup takes over. */
+	snd_hda_codec_write(codec, 0x21, 0,
+			    AC_VERB_SET_PIN_WIDGET_CONTROL, pin_ctl);
 }
 
 static void alc256_fixup_asus_fx608lp(struct hda_codec *codec,
@@ -2401,19 +2367,9 @@ static void alc256_fixup_asus_fx608lp(struct hda_codec *codec,
 {
 	struct alc_spec *spec = codec->spec;
 
-	if (codec->core.vendor_id != 0x10ec0256 ||
-	    codec->core.subsystem_id != 0x10431064)
-		return;
-
-	if (action == HDA_FIXUP_ACT_PRE_PROBE) {
-		spec->init_hook = alc256_fx608lp_init;
-		spec->shutup = alc256_fx608lp_shutup;
-	}
-	codec_info(codec, "FX608LP-v1 fixup action=%d cfg19=0x%08x headset=0x%x inputs=%d\n",
-		   action, snd_hda_codec_get_pincfg(codec, 0x19),
-		   spec->headset_mic_pin, spec->gen.autocfg.num_inputs);
-	if (action == HDA_FIXUP_ACT_INIT)
-		alc256_fx608lp_log(codec, "generic-init-complete");
+	if (action == HDA_FIXUP_ACT_PRE_PROBE &&
+	    codec->core.vendor_id == 0x10ec0256)
+		spec->init_hook = alc256_init_asus_fx608lp;
 }
 
 static void alc288_update_headset_jack_cb(struct hda_codec *codec,
@@ -8400,6 +8356,7 @@ static const struct hda_model_fixup alc269_fixup_models[] = {
 	{.id = ALC221_FIXUP_HP_MIC_NO_PRESENCE, .name = "alc221-hp-mic"},
 	{.id = ALC256_FIXUP_ASUS_HEADSET_MODE, .name = "alc256-asus-headset"},
 	{.id = ALC256_FIXUP_ASUS_MIC, .name = "alc256-asus-mic"},
+	{.id = ALC256_FIXUP_ASUS_FX608LP, .name = "alc256-asus-fx608lp"},
 	{.id = ALC256_FIXUP_ASUS_AIO_GPIO2, .name = "alc256-asus-aio"},
 	{.id = ALC233_FIXUP_ASUS_MIC_NO_PRESENCE, .name = "alc233-asus"},
 	{.id = ALC233_FIXUP_EAPD_COEF_AND_MIC_NO_PRESENCE, .name = "alc233-eapd"},
@@ -9238,5 +9195,3 @@ static struct hda_codec_driver alc269_driver = {
 };
 
 module_hda_codec_driver(alc269_driver);
-
-MODULE_INFO(fx608lp_experiment, "v1");

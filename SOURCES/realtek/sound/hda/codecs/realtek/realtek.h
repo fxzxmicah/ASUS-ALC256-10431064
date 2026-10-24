@@ -103,7 +103,6 @@ struct alc_spec {
 	hda_nid_t headphone_mic_pin;
 	int current_headset_mode;
 	int current_headset_type;
-	bool fx608lp_init_done; /* first-init experiment for SSID 1043:1064 */
 
 	/* hooks */
 	void (*init_hook)(struct hda_codec *codec);
@@ -120,6 +119,7 @@ struct alc_spec {
 	unsigned int has_hs_key:1;
 	unsigned int no_internal_mic_pin:1;
 	unsigned int en_3kpull_low:1;
+	unsigned int fx608lp_init_done:1;
 	int num_speaker_amps;
 
 	/* for PLL fix */
