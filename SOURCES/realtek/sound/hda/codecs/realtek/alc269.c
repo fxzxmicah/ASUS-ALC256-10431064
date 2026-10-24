@@ -540,9 +540,9 @@ static void alc256_asus_fx608lp_init(struct hda_codec *codec)
 
 	alc_write_coefex_idx(codec, 0x57, 0x03, 0x09a3);
 	err = snd_hda_codec_write(codec, 0x21, 0,
-				 AC_VERB_SET_PIN_WIDGET_CONTROL, 0);
+				  AC_VERB_SET_PIN_WIDGET_CONTROL, 0);
 	if (err < 0 || snd_hda_codec_read(codec, 0x21, 0,
-					AC_VERB_GET_PIN_WIDGET_CONTROL, 0))
+					  AC_VERB_GET_PIN_WIDGET_CONTROL, 0))
 		goto restore;
 
 	alc_process_coef_fw(codec, coefs);

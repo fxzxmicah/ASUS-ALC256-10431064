@@ -1,4 +1,4 @@
-From 55380d1ebfac10f1a8ed23d8ce92776a25b33450 Mon Sep 17 00:00:00 2001
+From 5c57ef3d977a04dce05ae746e3b24d4e0c8646ef Mon Sep 17 00:00:00 2001
 From: Fxzx micah <48860358+fxzxmicah@users.noreply.github.com>
 Date: Sun, 25 Oct 2026 03:50:07 +0800
 Subject: [PATCH] ALSA: hda/realtek: Initialize the headset jack on ASUS
@@ -41,7 +41,7 @@ index 1204304..7eef7e3 100644
      ALC256 fixups on ASUS AIO machines
  alc233-eapd
 diff --git a/sound/hda/codecs/realtek/alc269.c b/sound/hda/codecs/realtek/alc269.c
-index 1623cf9..6fd3968 100644
+index 1623cf9..966257c 100644
 --- a/sound/hda/codecs/realtek/alc269.c
 +++ b/sound/hda/codecs/realtek/alc269.c
 @@ -502,6 +502,59 @@ static void alc256_init(struct hda_codec *codec)
@@ -88,9 +88,9 @@ index 1623cf9..6fd3968 100644
 +
 +	alc_write_coefex_idx(codec, 0x57, 0x03, 0x09a3);
 +	err = snd_hda_codec_write(codec, 0x21, 0,
-+				 AC_VERB_SET_PIN_WIDGET_CONTROL, 0);
++				  AC_VERB_SET_PIN_WIDGET_CONTROL, 0);
 +	if (err < 0 || snd_hda_codec_read(codec, 0x21, 0,
-+					AC_VERB_GET_PIN_WIDGET_CONTROL, 0))
++					  AC_VERB_GET_PIN_WIDGET_CONTROL, 0))
 +		goto restore;
 +
 +	alc_process_coef_fw(codec, coefs);
