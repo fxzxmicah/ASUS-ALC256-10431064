@@ -51,7 +51,7 @@ with subsystem ID 1043:1064. Built from maintained Fedora kernel sources
 against the matching kernel-devel package. The original Fedora modules
 are preserved, and packages for different kernels can coexist.
 
-Modules are unsigned in CI. Installation signs them when a local MOK key
+The module is unsigned in CI. Installation signs it when a local MOK key
 and certificate are available at /etc/keys/modsign.key and modsign.der.
 
 %prep
@@ -71,13 +71,12 @@ install -m 0644 *.ko.xz %{buildroot}%{module_dir}/
 install -d %{buildroot}%{_prefix}/lib/depmod.d
 cat > %{buildroot}%{_prefix}/lib/depmod.d/asus-alc256-%{kernel_ver}-%{kernel_rel}.conf <<EOF
 override snd-hda-codec-alc269 %{kernel_ver}-%{kernel_rel}.%{_arch} updates/asus-alc256
-override snd-hda-codec-realtek-lib %{kernel_ver}-%{kernel_rel}.%{_arch} updates/asus-alc256
 EOF
 install -Dm0644 %{SOURCE1} %{buildroot}%{_licensedir}/%{name}-%{version}-%{release}/LICENSE
 install -Dm0644 %{SOURCE2} %{buildroot}%{_docdir}/%{name}-%{version}-%{release}/README
 
 %check
-for module in snd-hda-codec-alc269 snd-hda-codec-realtek-lib; do
+for module in snd-hda-codec-alc269; do
     test "$(modinfo -F vermagic "$module.ko.xz" | cut -d ' ' -f1)" = "%{kernel_ver}-%{kernel_rel}.%{_arch}"
     test -z "$(modinfo -F signer "$module.ko.xz")"
     modinfo "$module.ko.xz"

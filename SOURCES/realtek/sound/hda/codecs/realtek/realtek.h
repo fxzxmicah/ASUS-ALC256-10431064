@@ -119,7 +119,6 @@ struct alc_spec {
 	unsigned int has_hs_key:1;
 	unsigned int no_internal_mic_pin:1;
 	unsigned int en_3kpull_low:1;
-	unsigned int fx608lp_init_done:1;
 	int num_speaker_amps;
 
 	/* for PLL fix */

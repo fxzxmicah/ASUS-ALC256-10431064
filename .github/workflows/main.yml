@@ -27,10 +27,14 @@ jobs:
 
       - name: Check Kernel Patch
         run: |
-          curl --fail --silent --show-error --location \
+          curl --retry 3 --fail --silent --show-error --location \
             https://raw.githubusercontent.com/torvalds/linux/5b0764a53235d3c77e1ed674e836e1b3fe1a4b1f/scripts/checkpatch.pl \
             -o /tmp/checkpatch.pl
-          perl /tmp/checkpatch.pl --no-tree --strict --no-signoff upstream/*.patch
+          if ! perl /tmp/checkpatch.pl --no-tree --strict --no-signoff upstream/*.patch > /tmp/checkpatch.log 2>&1; then
+            sed 's/^/::error::/' /tmp/checkpatch.log
+            exit 1
+          fi
+          cat /tmp/checkpatch.log
 
       - name: Configure RPM Macros
         run: |

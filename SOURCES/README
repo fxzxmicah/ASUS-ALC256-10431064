@@ -1,15 +1,15 @@
 ASUS ALC256 headset microphone fix
 
-Replacement Realtek modules for ASUS FX608LP laptops with ALC256 (10ec:0256)
+Replacement Realtek codec module for ASUS FX608LP laptops with ALC256 (10ec:0256)
 and subsystem ID 1043:1064. The cold-boot initialization sequence has restored
 headset microphone recording on the tested laptop.
 
 Packages match one Fedora kernel version and preserve its original modules.
-Installation signs the replacement modules when /etc/keys/modsign.key and
+Installation signs the replacement module when /etc/keys/modsign.key and
 /etc/keys/modsign.der exist, then runs depmod. Secure Boot requires the signing
 certificate to be trusted. Missing key files cause signing to be skipped.
 
-If the target initramfs contains Realtek modules, rebuild it after installation
+If the target initramfs contains the replaced module, rebuild it after installation
 or removal and reboot. Removing this package restores the original module
 selection for that kernel.
 

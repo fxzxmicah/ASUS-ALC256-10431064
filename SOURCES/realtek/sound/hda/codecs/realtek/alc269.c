@@ -500,6 +500,59 @@ static void alc256_init(struct hda_codec *codec)
 	alc_write_coef_idx(codec, 0x36, 0x5757);
 }
 
+/*
+ * With a headset connected at boot, the FX608LP needs the OEM initialization
+ * sequence before generic pin setup for headset detection to work. Run it only
+ * on the first initialization; runtime resume uses the normal ALC256 setup.
+ */
+static void alc256_asus_fx608lp_init(struct hda_codec *codec)
+{
+	struct alc_spec *spec = codec->spec;
+	static const struct coef_fw coefs[] = {
+		WRITE_COEF(0x1b, 0x8a4b),
+		WRITE_COEF(0x45, 0xd089),
+		WRITE_COEF(0x1b, 0x0a4b),
+		WRITE_COEF(0x46, 0x0004),
+		WRITE_COEF(0x1b, 0x0e4b),
+		{}
+	};
+	unsigned int sense, pin_ctl;
+	int val, err;
+
+	alc256_init(codec);
+	if (spec->done_hp_init)
+		return;
+
+	spec->done_hp_init = true;
+	sense = snd_hda_codec_read(codec, 0x21, 0, AC_VERB_GET_PIN_SENSE, 0);
+	if (sense == ~0U || !(sense & AC_PINSENSE_PRESENCE))
+		return;
+
+	/* This sequence is for the ALC256 variant with bits 5:4 clear. */
+	val = alc_read_coef_idx(codec, 0x5b);
+	if (val < 0 || (val & 0x30))
+		return;
+
+	pin_ctl = snd_hda_codec_read(codec, 0x21, 0,
+				     AC_VERB_GET_PIN_WIDGET_CONTROL, 0);
+	if (pin_ctl > 0xff)
+		return;
+
+	alc_write_coefex_idx(codec, 0x57, 0x03, 0x09a3);
+	err = snd_hda_codec_write(codec, 0x21, 0,
+				 AC_VERB_SET_PIN_WIDGET_CONTROL, 0);
+	if (err < 0 || snd_hda_codec_read(codec, 0x21, 0,
+					AC_VERB_GET_PIN_WIDGET_CONTROL, 0))
+		goto restore;
+
+	alc_process_coef_fw(codec, coefs);
+	msleep(30);
+restore:
+	/* Preserve the output state until generic pin setup takes over. */
+	snd_hda_codec_write(codec, 0x21, 0,
+			    AC_VERB_SET_PIN_WIDGET_CONTROL, pin_ctl);
+}
+
 static void alc256_shutup(struct hda_codec *codec)
 {
 	struct alc_spec *spec = codec->spec;
@@ -2309,59 +2362,6 @@ static void alc_fixup_headset_mode_alc255_no_hp_mic(struct hda_codec *codec,
 	}
 }
 
-/*
- * With a headset connected at boot, the FX608LP needs the OEM initialization
- * sequence before generic pin setup for headset detection to work. Run it only
- * on the first initialization; runtime resume uses the normal ALC256 setup.
- */
-static void alc256_init_asus_fx608lp(struct hda_codec *codec)
-{
-	struct alc_spec *spec = codec->spec;
-	static const struct coef_fw cold_init[] = {
-		WRITE_COEF(0x1b, 0x8a4b),
-		WRITE_COEF(0x45, 0xd089),
-		WRITE_COEF(0x1b, 0x0a4b),
-		WRITE_COEF(0x46, 0x0004),
-		WRITE_COEF(0x1b, 0x0e4b),
-		{}
-	};
-	unsigned int sense, pin_ctl;
-	int coef, err;
-
-	alc256_init(codec);
-	if (spec->fx608lp_init_done)
-		return;
-
-	spec->fx608lp_init_done = true;
-	sense = snd_hda_codec_read(codec, 0x21, 0, AC_VERB_GET_PIN_SENSE, 0);
-	if (sense == ~0U || !(sense & AC_PINSENSE_PRESENCE))
-		return;
-
-	/* This sequence is for the ALC256 variant with bits 5:4 clear. */
-	coef = alc_read_coef_idx(codec, 0x5b);
-	if (coef < 0 || (coef & 0x30))
-		return;
-
-	pin_ctl = snd_hda_codec_read(codec, 0x21, 0,
-				     AC_VERB_GET_PIN_WIDGET_CONTROL, 0);
-	if (pin_ctl > 0xff)
-		return;
-
-	alc_write_coefex_idx(codec, 0x57, 0x03, 0x09a3);
-	err = snd_hda_codec_write(codec, 0x21, 0,
-				 AC_VERB_SET_PIN_WIDGET_CONTROL, 0);
-	if (err < 0 || snd_hda_codec_read(codec, 0x21, 0,
-					AC_VERB_GET_PIN_WIDGET_CONTROL, 0))
-		goto restore;
-
-	alc_process_coef_fw(codec, cold_init);
-	msleep(30);
-restore:
-	/* Preserve the output state until generic pin setup takes over. */
-	snd_hda_codec_write(codec, 0x21, 0,
-			    AC_VERB_SET_PIN_WIDGET_CONTROL, pin_ctl);
-}
-
 static void alc256_fixup_asus_fx608lp(struct hda_codec *codec,
 				    const struct hda_fixup *fix, int action)
 {
@@ -2369,7 +2369,7 @@ static void alc256_fixup_asus_fx608lp(struct hda_codec *codec,
 
 	if (action == HDA_FIXUP_ACT_PRE_PROBE &&
 	    codec->core.vendor_id == 0x10ec0256)
-		spec->init_hook = alc256_init_asus_fx608lp;
+		spec->init_hook = alc256_asus_fx608lp_init;
 }
 
 static void alc288_update_headset_jack_cb(struct hda_codec *codec,

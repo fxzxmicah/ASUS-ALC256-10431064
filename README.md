@@ -12,8 +12,7 @@ Cold-boot microphone recording with the sequence has been confirmed on an ASUS
 TX Gaming FX608LP running Fedora Workstation with BIOS FX608LP.315. Detection
 returned a valid CTIA signature. The individual register operations have not
 been isolated, and testing does not establish support for other laptop models.
-The production cleanup of that sequence still requires a fresh build and a
-hardware regression check.
+Regression testing of the current release candidate is pending.
 
 ## Installation
 
@@ -30,7 +29,7 @@ Select a single matching RPM when several downloads are present. To replace an
 already installed build with the same version and release, use `dnf reinstall`
 instead of `dnf install`.
 
-The package installs both Realtek modules under `updates/asus-alc256` and gives
+The package installs `snd_hda_codec_alc269` under `updates/asus-alc256` and gives
 that directory precedence for the target kernel. It keeps Fedora's original
 modules intact and supports packages for multiple kernel versions.
 
@@ -53,11 +52,11 @@ enrollment in the firmware MOK manager. Do not disable Secure Boot.
 ### Initramfs and module selection
 
 The package runs `depmod` after installation and removal. If the target kernel's
-initramfs contains either Realtek module, rebuild that image after signing and
+initramfs contains the replaced module, rebuild that image after signing and
 before rebooting. For a package matching the currently running kernel:
 
 ```sh
-lsinitrd -k "$(uname -r)" | grep -E 'snd-hda-codec-(alc269|realtek-lib)'
+lsinitrd -k "$(uname -r)" | grep 'snd-hda-codec-alc269'
 run0 --via-shell dracut --force --kver "$(uname -r)"
 ```
 
@@ -91,7 +90,7 @@ requires no compiler or kernel development environment on the target computer.
 The workflow publishes RPMs to GitHub Releases.
 
 `SOURCES/realtek` contains maintained Fedora downstream sources and the private
-headers needed to build the two modules. Source provenance is in
+headers needed to build the codec module. Source provenance is in
 [`FEDORA`](SOURCES/realtek/FEDORA). A new kernel can be built without source edits
 when the relevant Fedora interfaces remain compatible; source changes require
 review and adaptation of the maintained driver.

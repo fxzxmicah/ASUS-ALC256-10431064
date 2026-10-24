@@ -1,9 +1,9 @@
 diff --git a/sound/hda/codecs/realtek/alc269.c b/sound/hda/codecs/realtek/alc269.c
-index e98cc42..00b7ac7 100644
+index e98cc42..6442476 100644
 --- a/sound/hda/codecs/realtek/alc269.c
 +++ b/sound/hda/codecs/realtek/alc269.c
-@@ -2309,6 +2309,69 @@ static void alc_fixup_headset_mode_alc255_no_hp_mic(struct hda_codec *codec,
- 	}
+@@ -500,6 +500,59 @@ static void alc256_init(struct hda_codec *codec)
+ 	alc_write_coef_idx(codec, 0x36, 0x5757);
  }
  
 +/*
@@ -11,10 +11,10 @@ index e98cc42..00b7ac7 100644
 + * sequence before generic pin setup for headset detection to work. Run it only
 + * on the first initialization; runtime resume uses the normal ALC256 setup.
 + */
-+static void alc256_init_asus_fx608lp(struct hda_codec *codec)
++static void alc256_asus_fx608lp_init(struct hda_codec *codec)
 +{
 +	struct alc_spec *spec = codec->spec;
-+	static const struct coef_fw cold_init[] = {
++	static const struct coef_fw coefs[] = {
 +		WRITE_COEF(0x1b, 0x8a4b),
 +		WRITE_COEF(0x45, 0xd089),
 +		WRITE_COEF(0x1b, 0x0a4b),
@@ -23,20 +23,20 @@ index e98cc42..00b7ac7 100644
 +		{}
 +	};
 +	unsigned int sense, pin_ctl;
-+	int coef, err;
++	int val, err;
 +
 +	alc256_init(codec);
-+	if (spec->fx608lp_init_done)
++	if (spec->done_hp_init)
 +		return;
 +
-+	spec->fx608lp_init_done = true;
++	spec->done_hp_init = true;
 +	sense = snd_hda_codec_read(codec, 0x21, 0, AC_VERB_GET_PIN_SENSE, 0);
 +	if (sense == ~0U || !(sense & AC_PINSENSE_PRESENCE))
 +		return;
 +
 +	/* This sequence is for the ALC256 variant with bits 5:4 clear. */
-+	coef = alc_read_coef_idx(codec, 0x5b);
-+	if (coef < 0 || (coef & 0x30))
++	val = alc_read_coef_idx(codec, 0x5b);
++	if (val < 0 || (val & 0x30))
 +		return;
 +
 +	pin_ctl = snd_hda_codec_read(codec, 0x21, 0,
@@ -51,7 +51,7 @@ index e98cc42..00b7ac7 100644
 +					AC_VERB_GET_PIN_WIDGET_CONTROL, 0))
 +		goto restore;
 +
-+	alc_process_coef_fw(codec, cold_init);
++	alc_process_coef_fw(codec, coefs);
 +	msleep(30);
 +restore:
 +	/* Preserve the output state until generic pin setup takes over. */
@@ -59,6 +59,13 @@ index e98cc42..00b7ac7 100644
 +			    AC_VERB_SET_PIN_WIDGET_CONTROL, pin_ctl);
 +}
 +
+ static void alc256_shutup(struct hda_codec *codec)
+ {
+ 	struct alc_spec *spec = codec->spec;
+@@ -2309,6 +2362,16 @@ static void alc_fixup_headset_mode_alc255_no_hp_mic(struct hda_codec *codec,
+ 	}
+ }
+ 
 +static void alc256_fixup_asus_fx608lp(struct hda_codec *codec,
 +				    const struct hda_fixup *fix, int action)
 +{
@@ -66,7 +73,7 @@ index e98cc42..00b7ac7 100644
 +
 +	if (action == HDA_FIXUP_ACT_PRE_PROBE &&
 +	    codec->core.vendor_id == 0x10ec0256)
-+		spec->init_hook = alc256_init_asus_fx608lp;
++		spec->init_hook = alc256_asus_fx608lp_init;
 +}
 +
  static void alc288_update_headset_jack_cb(struct hda_codec *codec,
@@ -110,15 +117,3 @@ index e98cc42..00b7ac7 100644
  	{.id = ALC256_FIXUP_ASUS_AIO_GPIO2, .name = "alc256-asus-aio"},
  	{.id = ALC233_FIXUP_ASUS_MIC_NO_PRESENCE, .name = "alc233-asus"},
  	{.id = ALC233_FIXUP_EAPD_COEF_AND_MIC_NO_PRESENCE, .name = "alc233-eapd"},
-diff --git a/sound/hda/codecs/realtek/realtek.h b/sound/hda/codecs/realtek/realtek.h
-index de95642..c3b183b 100644
---- a/sound/hda/codecs/realtek/realtek.h
-+++ b/sound/hda/codecs/realtek/realtek.h
-@@ -119,6 +119,7 @@ struct alc_spec {
- 	unsigned int has_hs_key:1;
- 	unsigned int no_internal_mic_pin:1;
- 	unsigned int en_3kpull_low:1;
-+	unsigned int fx608lp_init_done:1;
- 	int num_speaker_amps;
- 
- 	/* for PLL fix */
