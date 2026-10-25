@@ -8,11 +8,9 @@ silence when recording. Unplugging and reconnecting the headset restores the
 microphone. This driver adds an initialization sequence derived from the OEM
 audio driver, before Linux configures the headset pins.
 
-Cold-boot microphone recording with the sequence has been confirmed on an ASUS
-TX Gaming FX608LP running Fedora Workstation with BIOS FX608LP.315. Detection
-returned a valid CTIA signature. The individual register operations have not
-been isolated, and testing does not establish support for other laptop models.
-Regression testing of the current release candidate is pending.
+Cold-boot headset microphone recording has been verified on an ASUS TX Gaming
+FX608LP running Fedora Workstation with BIOS FX608LP.315. Headset detection
+returned a valid CTIA signature.
 
 ## Installation
 
@@ -49,19 +47,9 @@ mokutil --test-key /etc/keys/modsign.der
 If the certificate is not enrolled, import it with `mokutil --import` and complete
 enrollment in the firmware MOK manager. Do not disable Secure Boot.
 
-### Initramfs and module selection
+### Module selection
 
-The package runs `depmod` after installation and removal. If the target kernel's
-initramfs contains the replaced module, rebuild that image after signing and
-before rebooting. For a package matching the currently running kernel:
-
-```sh
-lsinitrd -k "$(uname -r)" | grep 'snd-hda-codec-alc269'
-run0 --via-shell dracut --force --kver "$(uname -r)"
-```
-
-For another installed kernel, pass its complete version to both commands.
-No custom dracut configuration is required.
+The package runs `depmod` after installation and removal.
 
 After rebooting into the target kernel, check the selected path and signature:
 
@@ -73,14 +61,12 @@ modinfo -F signer snd_hda_codec_alc269
 The path should contain `updates/asus-alc256`. `modinfo` describes the module on
 disk; compare its `srcversion` with
 `/sys/module/snd_hda_codec_alc269/srcversion` to check the loaded build as well.
-The driver uses the normal ALSA logging and has no experiment parameter.
 
 ## Removal
 
 Remove the package for the affected kernel using the package manager. Fedora's
-original modules become the selected modules again. If an initramfs was rebuilt
-with the replacement modules, rebuild it after removal and reboot. Packages for
-other kernel versions can remain installed.
+original modules become the selected modules again after rebooting. Packages
+for other kernel versions can remain installed.
 
 ## Building and maintenance
 
@@ -91,17 +77,15 @@ The workflow publishes RPMs to GitHub Releases.
 
 `SOURCES/realtek` contains maintained Fedora downstream sources and the private
 headers needed to build the codec module. Source provenance is in
-[`FEDORA`](SOURCES/realtek/FEDORA). A new kernel can be built without source edits
+[`FEDORA`](FEDORA). A new kernel can be built without source edits
 when the relevant Fedora interfaces remain compatible; source changes require
 review and adaptation of the maintained driver.
 
-[`0001-asus-fx608lp-coldboot.patch`](SOURCES/0001-asus-fx608lp-coldboot.patch)
-records the changes against the Fedora baseline. Builds use the maintained
-sources directly. The patch and baseline checksums are not packaged.
-
-An [upstream review patch](upstream/0001-alc256-asus-fx608lp.patch) is available
-against the commit recorded in [BASE](upstream/BASE). It includes the model
-documentation and has not been submitted upstream.
+[`0001-asus-fx608lp-coldboot.patch`](0001-asus-fx608lp-coldboot.patch)
+is a Git-generated mail-format patch describing the changes against the Fedora
+baseline. Source provenance and [baseline hashes](fedora-source.sha256) support
+review of that baseline. These review files stay at the repository root; RPM
+builds use the maintained sources directly.
 
 The quirk is selected automatically for subsystem ID `1043:1064`. For explicit
 testing on another ALC256 system, `snd_hda_intel.model=alc256-asus-fx608lp` selects

@@ -1,6 +1,0 @@
-Linux upstream baseline: 5b0764a53235d3c77e1ed674e836e1b3fe1a4b1f
-https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=5b0764a53235d3c77e1ed674e836e1b3fe1a4b1f
-
-Review draft. The initialization sequence was verified on hardware before
-removing diagnostic code. The cleaned implementation requires regression
-testing before submission. No Tested-by or Signed-off-by is asserted here.

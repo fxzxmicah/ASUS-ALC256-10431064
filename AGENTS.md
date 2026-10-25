@@ -18,11 +18,12 @@
 - 日常新内核构建应只需触发 workflow；不得将目标内核版本写死在 spec 或安装工具中。
 - 保留 workflow、SOURCES、SPECS 的职责结构。参考项目为 `fxzxmicah/nvidia-driver`，有本地副本时优先读取；对参考仓库的修改须在用户授权范围内。
 - 直接维护 `SOURCES/realtek` 中的 Fedora 下游源码及必要私有头文件，通过目标 kernel-devel 的 Kbuild 构建。不能用 vanilla Linux 源码替代 Fedora 下游基线。
-- 维护时同步更新 Fedora 源码基线、`FEDORA` 来源记录、`fedora-source.sha256` 和说明用 patch。先审阅 Fedora 更新并适配实验逻辑，不能用机械导出差异代替源码同步或适配。说明 patch 和基线校验表仅留在仓库，不列入 spec Source，不包含在二进制 RPM 或 SRPM 中。
+- 本项目以 Fedora 下游源码为上游基线，只维护一个由 Git `format-patch` 生成的说明用 patch，置于仓库根目录；不额外维护 Linux Git 基线的 patch，不在 CI 检查说明用 patch。
+- 维护时同步更新 Fedora 源码基线、仓库根目录的 `FEDORA` 来源记录、`fedora-source.sha256` 和说明用 patch。先审阅 Fedora 更新并适配修复逻辑，不能用机械导出差异代替源码同步或适配。说明 patch 和基线校验表仅留在仓库，不列入 spec Source，不包含在二进制 RPM 或 SRPM 中。
 - RPM Name 固定，仅使用 `kernel_ver` 表示 version、`kernel_rel` 表示 release，需要完整版本时拼接为 `%{kernel_ver}-%{kernel_rel}`；内核模块路径使用 `%{kernel_ver}-%{kernel_rel}.%{_arch}`。采用 `installonlypkg(kernel-module)` 实现多版本共存。分支名决定 Fedora container 版本。
 - depmod 配置文件按目标内核版本命名；override 直接在 `%install` 写入并限定该内核。许可证直接在 `%install` 安装。
 - 构建过程不下载 kernel SRPM、不应用 patch，不另建 ABI 测试框架。spectool 按整个 spec 获取来源，不在 workflow 中限定 Source 编号。
-- 不提供专用 dracut 配置，模块是否进入 initramfs 交由系统默认规则处理；已有镜像含被替换模块时，安装签名完成后及卸载后需更新目标 initramfs。
+- 不添加专用启动镜像配置或重建步骤，公开文档不提供相关操作说明。
 - 安装脚本只做本地签名和 depmod；卸载 RPM 恢复根文件系统中的原模块选择。不另造激活、回滚或签名配置框架，密钥路径和签名逻辑沿用参考仓库；缺少密钥或证书时跳过签名，不增加安装失败条件。
 - 内核及模块编译、RPM 构建检查通过远程 CI 完成；脚本语法检查不等于模块编译验证。
 - 私钥只留用户电脑；由本地 RPM 脚本触发签名。不能覆盖 Fedora 原模块、关闭 Secure Boot，或在失败时交付旧模块。

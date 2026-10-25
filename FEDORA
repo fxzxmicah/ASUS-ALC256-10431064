@@ -6,7 +6,7 @@ Downstream patch SHA256: 85325cfb512e091397c045b228716f1a4b758b11badc2b1f0006653
 
 Sources were extracted from the Fedora SRPM, not from a vanilla Linux checkout.
 The Fedora patch changes no imported sound/hda path; linux-kernel-test.patch is empty.
-Baseline file hashes are recorded in ../fedora-source.sha256.
+Baseline file hashes are recorded in fedora-source.sha256 using Fedora source paths.
 The package builds snd-hda-codec-alc269 and uses Fedora's existing Realtek support library.
-Local changes are documented by ../0001-asus-fx608lp-coldboot.patch.
+Local changes are documented by 0001-asus-fx608lp-coldboot.patch.
 The patch is for review and maintenance only; RPM builds the maintained sources directly.

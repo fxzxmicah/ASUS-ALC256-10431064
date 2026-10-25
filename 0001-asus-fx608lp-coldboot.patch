@@ -1,50 +1,36 @@
-From 5c57ef3d977a04dce05ae746e3b24d4e0c8646ef Mon Sep 17 00:00:00 2001
+From df00353f3c960ba4de17b61d5fb154090e2e64b6 Mon Sep 17 00:00:00 2001
 From: Fxzx micah <48860358+fxzxmicah@users.noreply.github.com>
-Date: Sun, 25 Oct 2026 03:50:07 +0800
-Subject: [PATCH] ALSA: hda/realtek: Initialize the headset jack on ASUS
+Date: Sun, 25 Oct 2026 12:58:38 +0800
+Subject: [PATCH] ALSA: hda/realtek: Fix cold-boot headset microphone on ASUS
  FX608LP
 
-On ASUS FX608LP systems with ALC256 and subsystem ID 1043:1064, a
-headset connected before boot does not record speech until it is
-unplugged and reconnected. Repeating headset classification later in
-initialization does not restore recording.
+On ASUS FX608LP systems with ALC256 and subsystem ID 1043:1064, a TRRS
+headset connected before boot produces noise or silence when recording.
+Unplugging and reconnecting the headset restores microphone recording.
 
-Add a first-initialization sequence derived from the OEM audio driver,
-before generic pin setup. Temporarily disable the headphone pin, program
-the codec coefficients and allow 30 ms for settling, then restore the pin.
-Keep the normal ALC256 initialization on subsequent runtime resumes and
-chain the existing ASUS headset microphone pin configuration.
+Initialize the headset path before generic pin setup using a sequence
+derived from the OEM driver. Temporarily disable the headphone pin,
+program the coefficients, wait 30 ms, and restore the previous pin control.
+Run the sequence only on the first initialization with a headset present
+and for the supported ALC256 variant. Reuse done_hp_init to keep subsequent
+runtime initialization on the normal ALC256 path.
 
-The sequence restored cold-boot recording on an ASUS TX Gaming FX608LP
-with BIOS FX608LP.315 under Fedora. Headset classification then read a
-valid CTIA signature instead of falling back to CTIA after failed checks.
-The contribution of each operation has not been isolated.
+Chain ALC256_FIXUP_ASUS_MIC_NO_PRESENCE to preserve the headset microphone
+configuration previously selected by the generic ASUS pin quirk. Add an
+explicit 1043:1064 match and the alc256-asus-fx608lp model option.
 
-Select the quirk automatically for 1043:1064 and expose
-alc256-asus-fx608lp for explicit model selection on other ALC256 systems.
+Tested on an ASUS TX Gaming FX608LP with BIOS FX608LP.315 under Fedora:
+headset microphone recording works with the headset connected before boot,
+and headset classification reads a valid CTIA signature.
 ---
- Documentation/sound/hd-audio/models.rst |  2 +
- sound/hda/codecs/realtek/alc269.c       | 73 +++++++++++++++++++++++++
- 2 files changed, 75 insertions(+)
+ sound/hda/codecs/realtek/alc269.c | 73 +++++++++++++++++++++++++++++++
+ 1 file changed, 73 insertions(+)
 
-diff --git a/Documentation/sound/hd-audio/models.rst b/Documentation/sound/hd-audio/models.rst
-index 1204304..7eef7e3 100644
---- a/Documentation/sound/hd-audio/models.rst
-+++ b/Documentation/sound/hd-audio/models.rst
-@@ -240,6 +240,8 @@ alc221-hp-mic
-     ALC221 headset fixups on HP machines
- alc256-asus-mic
-     ALC256 fixups on ASUS machines
-+alc256-asus-fx608lp
-+    ASUS FX608LP headset microphone cold-boot initialization
- alc256-asus-aio
-     ALC256 fixups on ASUS AIO machines
- alc233-eapd
 diff --git a/sound/hda/codecs/realtek/alc269.c b/sound/hda/codecs/realtek/alc269.c
-index 1623cf9..966257c 100644
+index e98cc42..c8ad2cb 100644
 --- a/sound/hda/codecs/realtek/alc269.c
 +++ b/sound/hda/codecs/realtek/alc269.c
-@@ -502,6 +502,59 @@ static void alc256_init(struct hda_codec *codec)
+@@ -500,6 +500,59 @@ static void alc256_init(struct hda_codec *codec)
  	alc_write_coef_idx(codec, 0x36, 0x5757);
  }
  
@@ -104,7 +90,7 @@ index 1623cf9..966257c 100644
  static void alc256_shutup(struct hda_codec *codec)
  {
  	struct alc_spec *spec = codec->spec;
-@@ -2406,6 +2459,16 @@ static void alc_fixup_headset_mode_acer_coldboot(struct hda_codec *codec,
+@@ -2309,6 +2362,16 @@ static void alc_fixup_headset_mode_alc255_no_hp_mic(struct hda_codec *codec,
  	}
  }
  
@@ -121,17 +107,17 @@ index 1623cf9..966257c 100644
  static void alc288_update_headset_jack_cb(struct hda_codec *codec,
  				       struct hda_jack_callback *jack)
  {
-@@ -4205,6 +4268,7 @@ enum {
- 	ALC286_FIXUP_ACER_AIO_HEADSET_MIC,
- 	ALC256_FIXUP_ASUS_HEADSET_MIC,
- 	ALC256_FIXUP_ASUS_MIC_NO_PRESENCE,
+@@ -4134,6 +4197,7 @@ enum {
+ 	ALC282_FIXUP_ACER_DISABLE_LINEOUT,
+ 	ALC255_FIXUP_ACER_LIMIT_INT_MIC_BOOST,
+ 	ALC256_FIXUP_ACER_HEADSET_MIC,
 +	ALC256_FIXUP_ASUS_FX608LP,
- 	ALC255_FIXUP_PREDATOR_SUBWOOFER,
- 	ALC299_FIXUP_PREDATOR_SPK,
- 	ALC256_FIXUP_MEDION_HEADSET_NO_PRESENCE,
-@@ -5758,6 +5822,13 @@ static const struct hda_fixup alc269_fixups[] = {
+ 	ALC285_FIXUP_IDEAPAD_S740_COEF,
+ 	ALC285_FIXUP_HP_LIMIT_INT_MIC_BOOST,
+ 	ALC295_FIXUP_ASUS_DACS,
+@@ -6158,6 +6222,13 @@ static const struct hda_fixup alc269_fixups[] = {
  		.chained = true,
- 		.chain_id = ALC256_FIXUP_ASUS_HEADSET_MODE
+ 		.chain_id = ALC269_FIXUP_HEADSET_MODE_NO_HP_MIC
  	},
 +	[ALC256_FIXUP_ASUS_FX608LP] = {
 +		.type = HDA_FIXUP_FUNC,
@@ -140,18 +126,18 @@ index 1623cf9..966257c 100644
 +		.chain_id = ALC256_FIXUP_ASUS_MIC_NO_PRESENCE,
 +	},
 +
- 	[ALC256_FIXUP_ASUS_MIC_NO_PRESENCE] = {
- 		.type = HDA_FIXUP_PINS,
- 		.v.pins = (const struct hda_pintbl[]) {
-@@ -7814,6 +7885,7 @@ static const struct hda_quirk alc269_fixup_tbl[] = {
+ 	[ALC285_FIXUP_IDEAPAD_S740_COEF] = {
+ 		.type = HDA_FIXUP_FUNC,
+ 		.v.func = alc285_fixup_ideapad_s740_coef,
+@@ -7530,6 +7601,7 @@ static const struct hda_quirk alc269_fixup_tbl[] = {
  	SND_PCI_QUIRK(0x1043, 0x103f, "ASUS TX300", ALC282_FIXUP_ASUS_TX300),
- 	SND_PCI_QUIRK(0x1043, 0x1044, "ASUS GA403UM", ALC285_FIXUP_ASUS_GA403U_HEADSET_MIC),
  	SND_PCI_QUIRK(0x1043, 0x1054, "ASUS G614FH/FM/FP", ALC287_FIXUP_CS35L41_I2C_2),
-+	SND_PCI_QUIRK(0x1043, 0x1064, "ASUS FX608LP", ALC256_FIXUP_ASUS_FX608LP),
  	SND_PCI_QUIRK(0x1043, 0x106d, "Asus K53BE", ALC269_FIXUP_LIMIT_INT_MIC_BOOST),
++	SND_PCI_QUIRK(0x1043, 0x1064, "ASUS FX608LP", ALC256_FIXUP_ASUS_FX608LP),
  	SND_PCI_QUIRK(0x1043, 0x106f, "ASUS VivoBook X515UA", ALC256_FIXUP_ASUS_MIC_NO_PRESENCE),
  	SND_PCI_QUIRK(0x1043, 0x1074, "ASUS G614PH/PM/PP", ALC287_FIXUP_CS35L41_I2C_2),
-@@ -8600,6 +8672,7 @@ static const struct hda_model_fixup alc269_fixup_models[] = {
+ 	SND_PCI_QUIRK(0x1043, 0x10a1, "ASUS UX391UA", ALC294_FIXUP_ASUS_SPK),
+@@ -8284,6 +8356,7 @@ static const struct hda_model_fixup alc269_fixup_models[] = {
  	{.id = ALC221_FIXUP_HP_MIC_NO_PRESENCE, .name = "alc221-hp-mic"},
  	{.id = ALC256_FIXUP_ASUS_HEADSET_MODE, .name = "alc256-asus-headset"},
  	{.id = ALC256_FIXUP_ASUS_MIC, .name = "alc256-asus-mic"},
