@@ -9,8 +9,8 @@ microphone. This driver adds an initialization sequence derived from the OEM
 audio driver, before Linux configures the headset pins.
 
 Cold-boot headset microphone recording has been verified on an ASUS TX Gaming
-FX608LP running Fedora Workstation with BIOS FX608LP.315. Headset detection
-returned a valid CTIA signature.
+FX608LP with Fedora kernel 7.2.11 and BIOS FX608LP.315. The Fedora 45 build
+uses 7.3.x sources and has not yet been tested on hardware.
 
 ## Installation
 
@@ -68,24 +68,16 @@ Remove the package for the affected kernel using the package manager. Fedora's
 original modules become the selected modules again after rebooting. Packages
 for other kernel versions can remain installed.
 
-## Building and maintenance
+## Building
 
 The branch name selects the Fedora container version. Run the GitHub Actions
-workflow to build for that branch's latest available `kernel-devel`. Building
-requires no compiler or kernel development environment on the target computer.
-The workflow publishes RPMs to GitHub Releases.
+workflow to build RPMs for that branch's latest available Fedora kernel. Enable
+`rebuild` to replace its latest release. No local compiler is needed.
 
-`SOURCES/realtek` contains maintained Fedora downstream sources and the private
-headers needed to build the codec module. Source provenance is in
-[`FEDORA`](FEDORA). A new kernel can be built without source edits
-when the relevant Fedora interfaces remain compatible; source changes require
-review and adaptation of the maintained driver.
+The driver is based on Fedora kernel sources. See [source provenance](FEDORA)
+and the [driver patch](0001-asus-fx608lp-coldboot.patch) for details.
 
-[`0001-asus-fx608lp-coldboot.patch`](0001-asus-fx608lp-coldboot.patch)
-is a Git-generated mail-format patch describing the changes against the Fedora
-baseline. Source provenance and [baseline hashes](fedora-source.sha256) support
-review of that baseline. These review files stay at the repository root; RPM
-builds use the maintained sources directly.
+## Compatibility
 
 The quirk is selected automatically for subsystem ID `1043:1064`. For explicit
 testing on another ALC256 system, `snd_hda_intel.model=alc256-asus-fx608lp` selects

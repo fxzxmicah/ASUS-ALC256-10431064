@@ -1,12 +1,12 @@
-Fedora source baseline: kernel-7.2.11-200.fc44
-Source RPM: https://kojipkgs.fedoraproject.org/packages/kernel/7.2.11/200.fc44/src/kernel-7.2.11-200.fc44.src.rpm
-Source RPM SHA256: 5e7c2d81cd5fc54749e94917b6c2604c23c089dd0d277681e85e54d04bf6edc6
-Downstream patch: patch-7.2-redhat.patch
-Downstream patch SHA256: 85325cfb512e091397c045b228716f1a4b758b11badc2b1f00066539a675ac14
+Fedora source baseline: kernel-7.3.4-300.fc45
+Source RPM: https://kojipkgs.fedoraproject.org/packages/kernel/7.3.4/300.fc45/src/kernel-7.3.4-300.fc45.src.rpm
+Source RPM SHA256: b600e1aa5eb710ae5db4e9a35b98bd171dec94ef2992997fa3526d6bfe44488b
+Source archive: linux-7.3.4.tar.xz
+Source archive SHA256: 62d8bdaaa7aeb18c52fd672de74f76e62906e673bcbdf762f80116a4197b6232
+Downstream patch: patch-7.3-redhat.patch
+Downstream patch SHA256: 9891b70843b319d9a5969fdc1cafa01cd88956a80dcefa720c1c1603c6e6ba78
 
-Sources were extracted from the Fedora SRPM, not from a vanilla Linux checkout.
-The Fedora patch changes no imported sound/hda path; linux-kernel-test.patch is empty.
-Baseline file hashes are recorded in fedora-source.sha256 using Fedora source paths.
-The package builds snd-hda-codec-alc269 and uses Fedora's existing Realtek support library.
-Local changes are documented by 0001-asus-fx608lp-coldboot.patch.
-The patch is for review and maintenance only; RPM builds the maintained sources directly.
+The source files come from this Fedora SRPM. Its downstream patch does not
+modify the imported sound/hda paths; linux-kernel-test.patch is empty.
+Unmodified file hashes: fedora-source.sha256
+Driver changes: 0001-asus-fx608lp-coldboot.patch

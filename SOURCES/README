@@ -1,8 +1,8 @@
 ASUS ALC256 headset microphone fix
 
 Replacement Realtek codec module for ASUS FX608LP laptops with ALC256 (10ec:0256)
-and subsystem ID 1043:1064. The cold-boot initialization sequence has restored
-headset microphone recording on the tested laptop.
+and subsystem ID 1043:1064. The initialization sequence has been verified with
+Fedora kernel 7.2.11; the Fedora 45 build has not yet been tested on hardware.
 
 Packages match one Fedora kernel version and preserve its original modules.
 Installation signs the replacement module when /etc/keys/modsign.key and

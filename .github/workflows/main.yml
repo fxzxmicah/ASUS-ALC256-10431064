@@ -1,50 +1,175 @@
-name: Build RPM & Release
+name: Build & Release
+run-name: ${{ inputs.rebuild == true && 'Rebuild & Release' || 'Build & Release' }}
 
 on:
-  push:
-    paths:
-      - 'SPECS/**'
-      - 'SOURCES/**'
+  schedule:
+    - cron: '0 4 */2 * *'
   workflow_dispatch:
+    inputs:
+      rebuild:
+        description: Rebuild latest release
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
+concurrency:
+  group: build-release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  job:
+  build:
     runs-on: ubuntu-latest
     container: fedora:${{ github.ref_name }}
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Install Dependencies
+      - name: Disable Repo
+        run: rm /usr/share/dnf5/repos.d/fedora-cisco-openh264.repo
+
+      - name: List Repo Versions
+        id: distribution
         run: |
-          dnf install -y rpmdevtools
+          {
+            echo "versions<<EOF"
+            dnf --refresh repoquery --available --queryformat="%{VERSION}-%{RELEASE}\n" kernel-devel
+            echo EOF
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: List GitHub Releases
+        id: repository
+        uses: actions/github-script@v9
+        with:
+          script: |
+            core.setOutput('releases', (await github.paginate(
+              github.rest.repos.listReleases,
+              {
+                ...context.repo,
+                per_page: 100
+              },
+              ({data}) => data
+                .filter(release => !release.draft && release.tag_name.endsWith(`.fc${process.env.GITHUB_REF_NAME}`))
+                .map(release => release.tag_name)
+            )).join('\n'));
+
+      - name: Select Latest Version
+        if: github.event_name != 'workflow_dispatch' || inputs.rebuild == false
+        id: normal
+        env:
+          VERSIONS: ${{ steps.distribution.outputs.versions }}
+          RELEASES: ${{ steps.repository.outputs.releases }}
+        run: |
+          version=$(printf '%s\n' "${VERSIONS}" | LC_ALL=C sort -Vr | head -n 1)
+          test -n "${version}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          if printf '%s\n' "${RELEASES}" | grep -Fxq "${version}"; then
+            echo "::notice::Release ${version} exists; skipping"
+            echo 'build=false' >> "${GITHUB_OUTPUT}"
+          else
+            echo 'build=true' >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Select Rebuild Release
+        if: github.event_name == 'workflow_dispatch' && inputs.rebuild == true
+        id: rebuild
+        env:
+          VERSIONS: ${{ steps.distribution.outputs.versions }}
+          RELEASES: ${{ steps.repository.outputs.releases }}
+        run: |
+          release=$(printf '%s\n' "${RELEASES}" | LC_ALL=C sort -Vr | head -n 1)
+          test -n "${release}"
+          echo "release=${release}" >> "${GITHUB_OUTPUT}"
+          if printf '%s\n' "${VERSIONS}" | grep -Fxq "${release}"; then
+            echo 'build=true' >> "${GITHUB_OUTPUT}"
+          else
+            echo "::error::Version ${release} is unavailable; skipping"
+            echo 'build=false' >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Lock Rebuild Version
+        if: steps.rebuild.outputs.build == 'true'
+        env:
+          VERSION: ${{ steps.rebuild.outputs.release }}
+        run: dnf versionlock add "kernel-devel-${VERSION}"
+
+      - name: Install Build Tools
+        if: steps.normal.outputs.build == 'true' || steps.rebuild.outputs.build == 'true'
+        run: dnf install -y rpmdevtools
 
       - name: Configure RPM Macros
+        if: steps.normal.outputs.build == 'true' || steps.rebuild.outputs.build == 'true'
         run: |
           cat > ~/.rpmmacros <<EOF
-          %vendor GitHub (${{ github.repository }})
-          # Different with "github.workspace" in container environment
+          %vendor GitHub (${GITHUB_REPOSITORY})
           %_topdir ${GITHUB_WORKSPACE}
           EOF
 
       - name: Build RPM Packages
+        if: steps.normal.outputs.build == 'true' || steps.rebuild.outputs.build == 'true'
         run: |
           dnf builddep -y SPECS/*.spec
           tar -cJf SOURCES/realtek.tar.xz -C SOURCES realtek
           spectool --get-files --sourcedir SPECS/*.spec
-          rpmbuild -ba SPECS/*.spec
+          rpmbuild -bb SPECS/*.spec
 
-      - name: Check and Prepare Release
-        id: vars
-        run: |
-          echo "version=$(rpm -q --queryformat="%{VERSION}-%{RELEASE}" kernel-devel)" >> $GITHUB_OUTPUT
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
+      - name: Remove Previous Release
+        if: steps.rebuild.outputs.build == 'true'
+        uses: actions/github-script@v9
+        env:
+          RELEASE: ${{ steps.rebuild.outputs.release }}
         with:
-          tag_name: ${{ steps.vars.outputs.version }}
-          files: RPMS/*/*
+          script: |
+            const {data: release} = await github.rest.repos.getReleaseByTag({
+              ...context.repo,
+              tag: process.env.RELEASE
+            });
+            await github.rest.repos.deleteRelease({
+              ...context.repo,
+              release_id: release.id
+            });
+            await github.rest.git.deleteRef({
+              ...context.repo,
+              ref: `tags/${process.env.RELEASE}`
+            });
+
+      - name: Create GitHub Release
+        if: steps.normal.outputs.build == 'true' || steps.rebuild.outputs.build == 'true'
+        uses: actions/github-script@v9
+        env:
+          RELEASE: ${{ steps.normal.outputs.version || steps.rebuild.outputs.release }}
+        with:
+          script: |
+            const fs = await import('node:fs/promises');
+            const {basename} = await import('node:path');
+            const release = process.env.RELEASE;
+            await github.rest.git.createRef({
+              ...context.repo,
+              ref: `refs/tags/${release}`,
+              sha: context.sha
+            });
+            const {data} = await github.rest.repos.createRelease({
+              ...context.repo,
+              tag_name: release,
+              name: release,
+              draft: true,
+              body: `RPMs for kernel ${release}.\n\nSource commit: ${context.sha}`
+            });
+            for await (const file of fs.glob('RPMS/**/*.rpm')) {
+              core.info(`Uploading ${file}`);
+              await github.rest.repos.uploadReleaseAsset({
+                ...context.repo,
+                release_id: data.id,
+                name: basename(file),
+                data: await fs.readFile(file),
+                headers: {'content-type': 'application/octet-stream'}
+              });
+            }
+            await github.rest.repos.updateRelease({
+              ...context.repo,
+              release_id: data.id,
+              draft: false,
+              make_latest: 'false'
+            });

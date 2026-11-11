@@ -1,8 +1,8 @@
 # Feature: sign module
 %define sign_module 1
 
-%global kernel_ver %(dnf repoquery kernel-devel --latest-limit=1 --queryformat="%%{VERSION}")
-%global kernel_rel %(dnf repoquery kernel-devel --latest-limit=1 --queryformat="%%{RELEASE}")
+%define kernel_ver %(rpm --query --queryformat="%%{VERSION}" kernel-devel | grep "^[0-9]" || echo 0)
+%define kernel_rel %(rpm --query --queryformat="%%{RELEASE}" kernel-devel | grep "^[0-9]" || echo 0)
 %global module_dir %{_prefix}/lib/modules/%{kernel_ver}-%{kernel_rel}.%{_arch}/updates/asus-alc256
 %global debug_package %{nil}
 
@@ -21,10 +21,10 @@ Source0:        realtek.tar.xz
 Source1:        LICENSE
 Source2:        README
 %if %{sign_module}
-Source3:        https://github.com/fxzxmic/sign-module/releases/download/v1.0.2/sign-module
+Source3:        https://github.com/fxzxmic/sign-module/releases/download/v1.1.0/sign-module
 %endif
 
-BuildRequires:  gcc make kernel-devel = %{kernel_ver}-%{kernel_rel}
+BuildRequires:  gcc make kernel-devel
 BuildRequires:  kmod xz
 %if %{sign_module}
 BuildRequires:  gzip
@@ -39,7 +39,7 @@ Supplements:    kernel-modules-uname-r = %{kernel_ver}-%{kernel_rel}.%{_arch}
 %if %{sign_module}
 Requires(post): %{_bindir}/base64
 Requires(post): %{_bindir}/gunzip
-Requires(post): libcrypto.so.3()(64bit)
+Requires(post): libcrypto.so.4()(64bit)
 Requires(post): liblzma.so.5()(64bit)
 Requires(post): libc.so.6()(64bit)
 Requires(post): libz.so.1()(64bit)
@@ -51,8 +51,8 @@ with subsystem ID 1043:1064. Built from maintained Fedora kernel sources
 against the matching kernel-devel package. The original Fedora modules
 are preserved, and packages for different kernels can coexist.
 
-The module is unsigned in CI. Installation signs it when a local MOK key
-and certificate are available at /etc/keys/modsign.key and modsign.der.
+Installation signs the module when a local MOK key and certificate are
+available at /etc/keys/modsign.key and modsign.der.
 
 %prep
 %setup -q -n realtek
